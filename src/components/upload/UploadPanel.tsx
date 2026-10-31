@@ -2,27 +2,20 @@
 
 import { useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { SurveyDashboard } from "@/components/survey/SurveyDashboard";
+import { useLang, type MessageKey } from "@/lib/i18n";
 import type { ApiError, CleaningResult, RemovalReason } from "@/lib/survey-cleaner";
 
 const MAX_BYTES = 4 * 1024 * 1024; // same limit as the API route (Vercel allows 4.5 MB)
 
-const REMOVAL_LABELS: Record<RemovalReason, string> = {
-  duplicate_phone: "مكررات بنفس رقم الهاتف",
-  test_comment: "تعليقات تجريبية",
-  no_scores: "بدون أي تقييم",
-  invalid_date: "تاريخ غير مقروء",
-  before_start_date: "ردود قبل 17 أغسطس 2026",
-  junk_entry: "إدخالات عشوائية (رقم واسم غير صالحين)",
-  response_header_row: "صف العناوين",
+const REMOVAL_KEYS: Record<RemovalReason, MessageKey> = {
+  duplicate_phone: "removalDuplicatePhone",
+  test_comment: "removalTestComment",
+  no_scores: "removalNoScores",
+  invalid_date: "removalInvalidDate",
+  before_start_date: "removalBeforeStart",
+  junk_entry: "removalJunk",
+  response_header_row: "removalHeader",
 };
-
-/** "مكررات بنفس رقم الهاتف (5)، تعليقات تجريبية (2)" from the non-zero counts. */
-function describeRemoved(removed: CleaningResult["rows_removed"]): string {
-  const parts = (Object.keys(REMOVAL_LABELS) as RemovalReason[])
-    .filter((reason) => removed[reason] > 0)
-    .map((reason) => `${REMOVAL_LABELS[reason]} (${removed[reason]})`);
-  return parts.length > 0 ? parts.join("، ") : "لا شيء";
-}
 
 type State =
   | { phase: "idle" }
@@ -36,18 +29,27 @@ interface Props {
 }
 
 export function UploadPanel({ onCleaned }: Props) {
+  const { t, dir } = useLang();
   const inputRef = useRef<HTMLInputElement>(null);
   const runCounter = useRef(0);
   const [dragging, setDragging] = useState(false);
   const [state, setState] = useState<State>({ phase: "idle" });
 
+  /** "Duplicates (5), test comments (2)" from the non-zero counts. */
+  function describeRemoved(removed: CleaningResult["rows_removed"]): string {
+    const parts = (Object.keys(REMOVAL_KEYS) as RemovalReason[])
+      .filter((reason) => removed[reason] > 0)
+      .map((reason) => `${t(REMOVAL_KEYS[reason])} (${removed[reason]})`);
+    return parts.length > 0 ? parts.join(dir === "rtl" ? "، " : ", ") : t("removedNone");
+  }
+
   async function processFile(file: File) {
     if (!/\.xlsx$/i.test(file.name)) {
-      setState({ phase: "error", message: "اختر ملف Excel بصيغة xlsx." });
+      setState({ phase: "error", message: t("errNotXlsx") });
       return;
     }
     if (file.size > MAX_BYTES) {
-      setState({ phase: "error", message: "حجم الملف أكبر من 4 ميجابايت. احذف الأعمدة غير المستخدمة أو قسّمه حسب الأسبوع." });
+      setState({ phase: "error", message: t("errTooBig") });
       return;
     }
 
@@ -61,8 +63,9 @@ export function UploadPanel({ onCleaned }: Props) {
       const json = (await response.json().catch(() => null)) as CleaningResult | ApiError | null;
 
       if (!response.ok || !json) {
+        // Messages sent by the server are in Arabic.
         const message =
-          json && "error" in json ? json.error : `رد الخادم غير متوقع (${response.status}).`;
+          json && "error" in json ? json.error : t("errUnexpected", { status: response.status });
         setState({ phase: "error", message });
         return;
       }
@@ -72,7 +75,7 @@ export function UploadPanel({ onCleaned }: Props) {
       setState({ phase: "done", fileName: file.name, result, runId: runCounter.current });
       onCleaned?.(result, file.name);
     } catch {
-      setState({ phase: "error", message: "تعذر الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى." });
+      setState({ phase: "error", message: t("errNetwork") });
     }
   }
 
@@ -99,7 +102,7 @@ export function UploadPanel({ onCleaned }: Props) {
   const hasResult = state.phase === "done";
 
   return (
-    <div dir="rtl" className="space-y-6">
+    <div dir={dir} className="space-y-6">
       {/* The drop zone stays visible so a new file can replace the current one. */}
       <div
         role="button"
@@ -114,7 +117,7 @@ export function UploadPanel({ onCleaned }: Props) {
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0E8A8F] ${
+        className={`no-print flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0E8A8F] ${
           hasResult ? "py-6" : "py-14"
         } ${dragging ? "border-[#0E8A8F] bg-[#E6F4F4]" : "border-slate-300 bg-white hover:border-slate-400"}`}
       >
@@ -133,44 +136,48 @@ export function UploadPanel({ onCleaned }: Props) {
         />
         <p className="text-lg font-semibold">
           {busy
-            ? `جارٍ تنظيف الملف ${state.fileName}...`
+            ? t("uploadingFile", { name: state.fileName })
             : hasResult
-              ? "لتحليل ملف آخر، اسحبه هنا أو اضغط للاختيار"
-              : "اسحب ملف الاستبيان الأسبوعي هنا"}
+              ? t("dropAnother")
+              : t("dropHere")}
         </p>
         <p id="upload-hint" className="mt-1 text-sm text-slate-600">
-          {busy ? "يستغرق هذا عادةً بضع ثوانٍ." : "أو اضغط للاختيار. ملف Excel بصيغة xlsx وبحد أقصى 4 ميجابايت."}
+          {busy ? t("uploadingHint") : t("pickHint")}
         </p>
       </div>
 
       {state.phase === "error" && (
-        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
-          <p className="font-medium">لم يتم تنظيف الملف</p>
+        <div role="alert" className="no-print rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900">
+          <p className="font-medium">{t("cleanFailed")}</p>
           <p className="mt-1">{state.message}</p>
           <button type="button" onClick={reset} className="mt-2 text-sm underline underline-offset-2">
-            حاول مرة أخرى
+            {t("tryAgain")}
           </button>
         </div>
       )}
 
       {state.phase === "done" && (
         <>
-          <section aria-label="ملخص التنظيف" className="rounded-xl border border-slate-200 bg-white p-5">
+          <section
+            aria-label={t("cleaningSummaryAria")}
+            className="no-print rounded-xl border border-slate-200 bg-white p-5"
+          >
             <div role="status">
               <h2 className="text-lg font-semibold">
-                تم تنظيف {state.result.rows_clean.toLocaleString("en-US")} صف بنجاح
+                {t("cleanedTitle", { n: state.result.rows_clean.toLocaleString("en-US") })}
               </h2>
               <p className="mt-1 text-sm text-slate-700">
-                تم استبعاد: {describeRemoved(state.result.rows_removed)}.
+                {t("excludedLine", { list: describeRemoved(state.result.rows_removed) })}
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                عدد الصفوف في الملف: {state.result.rows_raw.toLocaleString("en-US")}
+                {t("rawRowsLine", { n: state.result.rows_raw.toLocaleString("en-US") })}
               </p>
             </div>
 
             {state.result.warnings.length > 0 && (
               <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <p className="font-medium">يرجى المراجعة</p>
+                <p className="font-medium">{t("reviewTitle")}</p>
+                {/* The warning texts come from the cleaner and are in Arabic. */}
                 <ul className="mt-1 list-disc space-y-1 ps-5">
                   {state.result.warnings.map((w) => (
                     <li key={w}>{w}</li>
@@ -179,7 +186,7 @@ export function UploadPanel({ onCleaned }: Props) {
               </div>
             )}
 
-            <p className="mt-4 text-sm text-slate-600">لم يتم حفظ أي شيء بعد. الحفظ في قاعدة البيانات هو الخطوة التالية.</p>
+            <p className="mt-4 text-sm text-slate-600">{t("notSavedYet")}</p>
           </section>
 
           <SurveyDashboard

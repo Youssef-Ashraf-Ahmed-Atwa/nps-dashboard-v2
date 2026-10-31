@@ -1,13 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import {
-  CATEGORY_COLORS,
-  CATEGORY_LABELS,
-  NPS_COLORS,
-  rowGroup,
-  type NpsGroup,
-} from "@/lib/survey-analytics";
+import { CATEGORY_COLORS, NPS_COLORS, rowGroup, type NpsGroup } from "@/lib/survey-analytics";
+import { CATEGORY_KEYS, useLang } from "@/lib/i18n";
 import { isUsefulComment, type CleanedSurvey } from "@/lib/survey-cleaner";
 
 const PAGE_SIZE = 25;
@@ -40,6 +35,7 @@ interface Props {
 }
 
 export function SurveyTable({ title, description, rows, accent }: Props) {
+  const { t, reason } = useLang();
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? rows : rows.slice(0, PAGE_SIZE);
 
@@ -51,16 +47,16 @@ export function SurveyTable({ title, description, rows, accent }: Props) {
       <p className="text-sm text-slate-600">{description}</p>
 
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[760px] text-right text-sm">
+        <table className="w-full min-w-[760px] text-start text-sm">
           <thead className="border-b border-slate-200 text-slate-600">
             <tr>
-              <th scope="col" className="py-2 pe-4 font-medium">رقم الهاتف</th>
-              <th scope="col" className="py-2 pe-4 font-medium">NPS</th>
-              <th scope="col" className="py-2 pe-4 font-medium">CSAT</th>
-              <th scope="col" className="py-2 pe-4 font-medium">مجال المشكلة</th>
-              <th scope="col" className="py-2 pe-4 font-medium">السبب التفصيلي</th>
-              <th scope="col" className="py-2 pe-4 font-medium">التعليق</th>
-              <th scope="col" className="py-2 font-medium">التاريخ</th>
+              <th scope="col" className="py-2 pe-4 text-start font-medium">{t("colPhone")}</th>
+              <th scope="col" className="py-2 pe-4 text-start font-medium">NPS</th>
+              <th scope="col" className="py-2 pe-4 text-start font-medium">CSAT</th>
+              <th scope="col" className="py-2 pe-4 text-start font-medium">{t("colCategory")}</th>
+              <th scope="col" className="py-2 pe-4 text-start font-medium">{t("colDetail")}</th>
+              <th scope="col" className="py-2 pe-4 text-start font-medium">{t("colComment")}</th>
+              <th scope="col" className="py-2 text-start font-medium">{t("colDate")}</th>
             </tr>
           </thead>
           <tbody>
@@ -77,7 +73,9 @@ export function SurveyTable({ title, description, rows, accent }: Props) {
                       {r.phone ?? r.raw_phone ?? "-"}
                     </span>
                     {r.phone === null && (
-                      <span className="ms-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-700">غير صالح</span>
+                      <span className="ms-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs text-slate-700">
+                        {t("invalidBadge")}
+                      </span>
                     )}
                     {r.customer_name && <div className="text-xs text-slate-500">{r.customer_name}</div>}
                   </td>
@@ -87,18 +85,20 @@ export function SurveyTable({ title, description, rows, accent }: Props) {
                     {r.root_cause ? (
                       <span className="inline-flex items-center gap-1.5">
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: CATEGORY_COLORS[r.root_cause] }} />
-                        {CATEGORY_LABELS[r.root_cause]}
+                        {t(CATEGORY_KEYS[r.root_cause])}
                       </span>
                     ) : (
-                      <span className="text-slate-400">غير محدد</span>
+                      <span className="text-slate-400">{t("notSpecified")}</span>
                     )}
                   </td>
-                  <td className="py-2.5 pe-4">{r.root_cause_detail ?? <span className="text-slate-400">-</span>}</td>
+                  <td className="py-2.5 pe-4">
+                    {r.root_cause_detail ? reason(r.root_cause_detail) : <span className="text-slate-400">-</span>}
+                  </td>
                   <td className="py-2.5 pe-4">
                     {r.comment ? (
                       <span className={useful ? "" : "text-slate-400"}>{r.comment}</span>
                     ) : (
-                      <span className="text-slate-400">بدون تعليق</span>
+                      <span className="text-slate-400">{t("noComment")}</span>
                     )}
                   </td>
                   <td className="whitespace-nowrap py-2.5 tabular-nums text-slate-600">{r.survey_date}</td>
@@ -115,7 +115,7 @@ export function SurveyTable({ title, description, rows, accent }: Props) {
           onClick={() => setExpanded((v) => !v)}
           className="mt-4 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0E8A8F]"
         >
-          {expanded ? "عرض أول 25 فقط" : `عرض الكل (${rows.length})`}
+          {expanded ? t("showFirst") : t("showAll", { n: rows.length })}
         </button>
       )}
     </section>

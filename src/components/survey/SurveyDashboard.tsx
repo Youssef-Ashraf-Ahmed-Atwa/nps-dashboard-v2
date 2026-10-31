@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import {
   buildLists,
-  CATEGORY_LABELS,
   complaintBreakdown,
   dateBounds,
   filterByDate,
@@ -11,9 +10,11 @@ import {
   summarize,
   type ComplaintScope,
 } from "@/lib/survey-analytics";
+import { CATEGORY_KEYS, useLang } from "@/lib/i18n";
 import type { CleanedSurvey } from "@/lib/survey-cleaner";
 import { ComplaintSection } from "./ComplaintSection";
 import { DateFilter } from "./DateFilter";
+import { ManagerReport } from "./ManagerReport";
 import { NpsCharts } from "./NpsCharts";
 import { SurveyTable } from "./SurveyTable";
 
@@ -45,11 +46,13 @@ function StatCard({
 }
 
 export function SurveyDashboard({ surveys, fileName }: Props) {
+  const { t, reason } = useLang();
   const bounds = useMemo(() => dateBounds(surveys), [surveys]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [scope, setScope] = useState<ComplaintScope>("dissatisfied");
   const [exportError, setExportError] = useState<string | null>(null);
+  const [showReport, setShowReport] = useState(false);
 
   const rangeInvalid = from !== "" && to !== "" && from > to;
   const rows = useMemo(() => (rangeInvalid ? [] : filterByDate(surveys, from, to)), [surveys, from, to, rangeInvalid]);
@@ -65,16 +68,16 @@ export function SurveyDashboard({ surveys, fileName }: Props) {
       // Loaded on demand so the xlsx library is not part of the page's first download.
       const XLSX = await import("xlsx");
       const data = rows.map((r) => ({
-        "التاريخ": r.survey_date,
-        "الاسم": r.customer_name ?? "",
-        "رقم الهاتف": r.phone ?? r.raw_phone ?? "",
-        "الرقم صالح": r.phone ? "نعم" : "لا",
-        "الموديل": r.vehicle_model ?? "",
+        [t("colDate")]: r.survey_date,
+        [t("colName")]: r.customer_name ?? "",
+        [t("colPhone")]: r.phone ?? r.raw_phone ?? "",
+        [t("colPhoneValid")]: r.phone ? t("yes") : t("no"),
+        [t("colModel")]: r.vehicle_model ?? "",
         CSAT: r.csat ?? "",
         NPS: r.nps ?? "",
-        "مجال المشكلة": r.root_cause ? CATEGORY_LABELS[r.root_cause] : "",
-        "السبب التفصيلي": r.root_cause_detail ?? "",
-        "التعليق": r.comment ?? "",
+        [t("colCategory")]: r.root_cause ? t(CATEGORY_KEYS[r.root_cause]) : "",
+        [t("colDetail")]: r.root_cause_detail ? reason(r.root_cause_detail) : "",
+        [t("colComment")]: r.comment ?? "",
       }));
       const sheet = XLSX.utils.json_to_sheet(data);
       const book = XLSX.utils.book_new();
@@ -82,11 +85,24 @@ export function SurveyDashboard({ surveys, fileName }: Props) {
       const label = `${from || bounds?.min || "all"}_${to || bounds?.max || "all"}`;
       XLSX.writeFile(book, `Survey_Cleaned_${label}.xlsx`);
     } catch {
-      setExportError("تعذر إنشاء ملف Excel. حاول مرة أخرى.");
+      setExportError(t("exportError"));
     }
   }
 
   if (!bounds) return null;
+
+  // The manager report replaces the whole dashboard (no phones, names or long lists).
+  if (showReport && rows.length > 0) {
+    return (
+      <ManagerReport
+        rows={rows}
+        from={from}
+        to={to}
+        fileName={fileName}
+        onBack={() => setShowReport(false)}
+      />
+    );
+  }
 
   const npsText = summary.nps === null ? "-" : summary.nps > 0 ? `+${summary.nps}` : `${summary.nps}`;
   const npsColor =
@@ -96,18 +112,28 @@ export function SurveyDashboard({ surveys, fileName }: Props) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">نتائج CSAT وNPS</h2>
+          <h2 className="text-2xl font-semibold tracking-tight">{t("dashTitle")}</h2>
           <p className="text-sm text-slate-600">{fileName}</p>
         </div>
         <div className="text-end">
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={rows.length === 0}
-            className="rounded-md bg-[#0F2A33] px-4 py-2 text-sm font-medium text-white hover:bg-[#17414f] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0E8A8F]"
-          >
-            تصدير البيانات المعروضة (Excel)
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowReport(true)}
+              disabled={rows.length === 0}
+              className="rounded-md border border-[#0F2A33] bg-white px-4 py-2 text-sm font-medium text-[#0F2A33] hover:bg-slate-50 disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0E8A8F]"
+            >
+              {t("reportBtn")}
+            </button>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={rows.length === 0}
+              className="rounded-md bg-[#0F2A33] px-4 py-2 text-sm font-medium text-white hover:bg-[#17414f] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0E8A8F]"
+            >
+              {t("exportBtn")}
+            </button>
+          </div>
           {exportError && (
             <p role="alert" className="mt-1 text-sm text-red-700">
               {exportError}
@@ -120,9 +146,9 @@ export function SurveyDashboard({ surveys, fileName }: Props) {
         bounds={bounds}
         from={from}
         to={to}
-        onChange={(f, t) => {
+        onChange={(f, t2) => {
           setFrom(f);
-          setTo(t);
+          setTo(t2);
         }}
         shown={rows.length}
         total={surveys.length}
@@ -130,46 +156,46 @@ export function SurveyDashboard({ surveys, fileName }: Props) {
 
       {rows.length === 0 ? (
         <p className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-600">
-          لا توجد ردود في الفترة المحددة.
+          {t("noResponsesInRange")}
         </p>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
             <StatCard
-              label="NPS"
+              label={t("statNps")}
               value={npsText}
               valueClass={npsColor}
-              hint={`من ${summary.npsCount} إجابة`}
+              hint={t("statNpsHint", { n: summary.npsCount })}
               accent="#0F2A33"
             />
             <StatCard
-              label="متوسط CSAT"
+              label={t("statCsat")}
               value={summary.avgCsat === null ? "-" : summary.avgCsat.toFixed(2)}
-              hint={`من 5، لعدد ${summary.csatCount} إجابة`}
+              hint={t("statCsatHint", { n: summary.csatCount })}
               accent="#0E8A8F"
             />
             <StatCard
-              label="غير الراضين"
+              label={t("statDissat")}
               value={String(summary.dissatisfied)}
-              hint={`${Math.round((summary.dissatisfied / summary.total) * 100)}% من الردود`}
+              hint={t("statDissatHint", { p: Math.round((summary.dissatisfied / summary.total) * 100) })}
               accent="#D6453D"
             />
             <StatCard
-              label="تعليقات مفيدة"
+              label={t("statUseful")}
               value={String(lists.usefulComments.length)}
-              hint="بدون «لا» و«شكرًا» ونحوها"
+              hint={t("statUsefulHint")}
               accent="#3B6EA8"
             />
             <StatCard
-              label="بحاجة لمتابعة"
+              label={t("statFollow")}
               value={String(lists.needFollowUp.length)}
-              hint="غير راضٍ، بدون تعليق، رقمه صالح"
+              hint={t("statFollowHint")}
               accent="#E0A100"
             />
             <StatCard
-              label="لا يمكن الاتصال بهم"
+              label={t("statNoContact")}
               value={String(lists.noContact.length)}
-              hint="غير راضٍ ورقم الهاتف غير صالح"
+              hint={t("statNoContactHint")}
               accent="#9AA5B1"
             />
           </div>
@@ -180,8 +206,8 @@ export function SurveyDashboard({ surveys, fileName }: Props) {
 
           {lists.needFollowUp.length > 0 && (
             <SurveyTable
-              title="عملاء بحاجة لمكالمة متابعة"
-              description="تقييم منخفض بدون تعليق مفيد، ورقم هاتفهم صالح. الأقل تقييمًا أولًا."
+              title={t("tblFollowTitle")}
+              description={t("tblFollowDesc")}
               rows={lists.needFollowUp}
               accent="#D6453D"
             />
@@ -189,8 +215,8 @@ export function SurveyDashboard({ surveys, fileName }: Props) {
 
           {lists.noContact.length > 0 && (
             <SurveyTable
-              title="عملاء غير راضين برقم هاتف غير صالح"
-              description="لا يمكن الاتصال بهم. الرقم المكتوب ظاهر كما أدخله العميل، وقد تجد وسيلة أخرى للتواصل في سجلات الخدمة."
+              title={t("tblNoContactTitle")}
+              description={t("tblNoContactDesc")}
               rows={lists.noContact}
               accent="#9AA5B1"
             />
@@ -198,8 +224,8 @@ export function SurveyDashboard({ surveys, fileName }: Props) {
 
           {lists.usefulComments.length > 0 && (
             <SurveyTable
-              title="تعليقات العملاء"
-              description="التعليقات التي تحتوي معلومة فعلية فقط. الأقل تقييمًا أولًا."
+              title={t("tblCommentsTitle")}
+              description={t("tblCommentsDesc")}
               rows={lists.usefulComments}
               accent="#3B6EA8"
             />
