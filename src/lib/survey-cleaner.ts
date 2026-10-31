@@ -24,6 +24,7 @@ export type RemovalReason =
   | "test_comment" // comment is "test"
   | "no_scores" // both CSAT and NPS are empty or unreadable
   | "invalid_date" // no readable Date Created (survey_date is required)
+  | "junk_entry" // unusable phone plus a meaningless name and chassis (typed at random)
   | "before_start_date" // answered before SURVEY_START_DATE (pilot / test batches)
   | "duplicate_phone"; // an older answer from a phone that answered again
 
@@ -79,7 +80,7 @@ export interface ApiError {
 export const REQUIRED_COLUMNS = ["Date Created", "AD2", "BOS6", "SSP6"] as const;
 
 /** Columns we use when they exist. A missing one only produces a warning. */
-export const OPTIONAL_COLUMNS = ["AD1", "AD4", "Z-Comment", "CC7", "SS1", "DP1"] as const;
+export const OPTIONAL_COLUMNS = ["AD1", "AD4", "AD5", "Z-Comment", "CC7", "SS1", "DP1"] as const;
 
 /** CC7 holds the complaint category itself (maintenance service / spare parts / the product). */
 const CATEGORY_COLUMN = "CC7";
@@ -231,6 +232,29 @@ export function normalizePhone(cell: unknown): string | null {
   return /^[0-9]{8,15}$/.test(digits) ? digits : null;
 }
 
+/**
+ * A name that looks like a real person: two words of 2+ letters each, or a
+ * single Arabic word of 4+ letters. Short strings and Latin keyboard mashing
+ * ("Hgg", "Fdaybj") do not count.
+ */
+function looksLikeRealName(name: string): boolean {
+  const words = normalizeArabic(name)
+    .split(" ")
+    .map((w) => w.replace(/[^a-z\u0621-\u064a]/g, ""))
+    .filter((w) => w.length >= 2);
+  if (words.length >= 2) return true;
+  return words.length === 1 && /^[\u0621-\u064a]{4,}$/.test(words[0]);
+}
+
+/**
+ * Junk entry = the phone is unusable AND the name is not a real name AND the
+ * chassis field is too short to be a chassis number (under 7 characters).
+ * Rows that only have a bad phone are NOT junk: their scores are kept.
+ */
+export function isJunkEntry(phone: string | null, name: string, chassis: string): boolean {
+  return phone === null && !looksLikeRealName(name) && chassis.replace(/[\s\u200f\u200e]/g, "").length < 7;
+}
+
 /** Builds a UTC timestamp, rejecting impossible dates such as 31/02. */
 function utcTimestamp(y: number, mo: number, d: number, h = 0, mi = 0, s = 0): number | null {
   if (h > 23 || mi > 59 || s > 59) return null;
@@ -332,7 +356,8 @@ interface Candidate {
  *  2. drop test comments
  *  3. extract CSAT / NPS and drop rows where both are empty
  *  4. read the date (rows without a readable date, or before SURVEY_START_DATE, are dropped)
- *  5. normalise the phone; an unusable phone does NOT drop the row
+ *  5. normalise the phone; an unusable phone does NOT drop the row, unless the
+ *     name and chassis are meaningless too (junk entry)
  *  6. keep only the latest answer per usable phone
  *
  * Throws MissingColumnsError when a required column is absent.
@@ -357,6 +382,7 @@ export function cleanSurveyRows(rows: RawRow[]): CleaningResult {
     no_scores: 0,
     invalid_date: 0,
     before_start_date: 0,
+    junk_entry: 0,
     duplicate_phone: 0,
   };
   const warnings: string[] = [];
@@ -403,6 +429,10 @@ export function cleanSurveyRows(rows: RawRow[]): CleaningResult {
 
     // An unusable phone keeps the row: the scores are real feedback.
     const phone = normalizePhone(cell(row, "AD2"));
+    if (isJunkEntry(phone, text(cell(row, "AD1")), text(cell(row, "AD5")))) {
+      removed.junk_entry++;
+      return;
+    }
     if (!phone) badPhoneRows.push(excelRow);
 
     if (csat.value === null || nps.value === null) singleScoreRows++;

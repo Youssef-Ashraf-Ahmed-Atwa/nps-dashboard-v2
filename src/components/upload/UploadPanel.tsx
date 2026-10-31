@@ -12,6 +12,7 @@ const REMOVAL_LABELS: Record<RemovalReason, string> = {
   no_scores: "بدون أي تقييم",
   invalid_date: "تاريخ غير مقروء",
   before_start_date: "ردود قبل 17 أغسطس 2026",
+  junk_entry: "إدخالات عشوائية (رقم واسم غير صالحين)",
   response_header_row: "صف العناوين",
 };
 
