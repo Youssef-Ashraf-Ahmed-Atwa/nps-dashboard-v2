@@ -6,6 +6,7 @@ import {
   complaintBreakdown,
   dateBounds,
   filterByDate,
+  hasField,
   scoreDistribution,
   summarize,
   type ComplaintScope,
@@ -15,8 +16,10 @@ import type { CleanedSurvey } from "@/lib/survey-cleaner";
 import { ComplaintSection } from "./ComplaintSection";
 import { DateFilter } from "./DateFilter";
 import { ManagerReport } from "./ManagerReport";
+import { GroupSection } from "./GroupSection";
 import { NpsCharts } from "./NpsCharts";
 import { SurveyTable } from "./SurveyTable";
+import { TrendSection } from "./TrendSection";
 
 interface Props {
   surveys: CleanedSurvey[];
@@ -46,7 +49,7 @@ function StatCard({
 }
 
 export function SurveyDashboard({ surveys, fileName }: Props) {
-  const { t, reason } = useLang();
+  const { t, reason, place } = useLang();
   const bounds = useMemo(() => dateBounds(surveys), [surveys]);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -73,6 +76,8 @@ export function SurveyDashboard({ surveys, fileName }: Props) {
         [t("colPhone")]: r.phone ?? r.raw_phone ?? "",
         [t("colPhoneValid")]: r.phone ? t("yes") : t("no"),
         [t("colModel")]: r.vehicle_model ?? "",
+        [t("colGovernorate")]: r.governorate ? place(r.governorate) : "",
+        [t("colServiceCenter")]: r.service_center ?? "",
         CSAT: r.csat ?? "",
         NPS: r.nps ?? "",
         [t("colCategory")]: r.root_cause ? t(CATEGORY_KEYS[r.root_cause]) : "",
@@ -201,6 +206,28 @@ export function SurveyDashboard({ surveys, fileName }: Props) {
           </div>
 
           <NpsCharts summary={summary} distribution={distribution} />
+
+          <TrendSection rows={rows} />
+
+          <GroupSection rows={rows} field="vehicle_model" title={t("modelTitle")} description={t("modelDesc")} />
+
+          {hasField(rows, "governorate") && (
+            <GroupSection
+              rows={rows}
+              field="governorate"
+              title={t("groupGovernorateTitle")}
+              description={t("groupGovernorateDesc")}
+            />
+          )}
+
+          {hasField(rows, "service_center") && (
+            <GroupSection
+              rows={rows}
+              field="service_center"
+              title={t("groupCenterTitle")}
+              description={t("groupCenterDesc")}
+            />
+          )}
 
           <ComplaintSection breakdown={breakdown} scope={scope} onScopeChange={setScope} />
 

@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import {
   buildLists,
+  groupBreakdown,
+  hasField,
   CATEGORY_COLORS,
   CATEGORY_ORDER,
   complaintBreakdown,
@@ -12,6 +14,8 @@ import {
 } from "@/lib/survey-analytics";
 import { CATEGORY_KEYS, LanguageToggle, useLang } from "@/lib/i18n";
 import type { CleanedSurvey } from "@/lib/survey-cleaner";
+import { GroupTable } from "./GroupSection";
+import { TrendTable } from "./TrendSection";
 
 interface Props {
   rows: CleanedSurvey[]; // already filtered by the dashboard's date range
@@ -22,6 +26,7 @@ interface Props {
 }
 
 const TOP_TERMS = 3;
+const REPORT_GROUP_ROWS = 10; // governorates / centres shown in the printed report
 const SMALL_SAMPLE = 100;
 
 // Print rules: only the report is printed, on A4, with the colours kept.
@@ -226,6 +231,38 @@ export function ManagerReport({ rows, from, to, fileName, onBack }: Props) {
                 );
               })}
             </ul>
+          </section>
+        )}
+
+        <section className="avoid-break">
+          <h2 className="text-lg font-semibold">{t("trendTitle")}</h2>
+          <div className="mt-3">
+            <TrendTable rows={rows} />
+          </div>
+        </section>
+
+        <section className="avoid-break">
+          <h2 className="text-lg font-semibold">{t("modelTitle")}</h2>
+          <div className="mt-3">
+            <GroupTable stats={groupBreakdown(rows, "vehicle_model")} field="vehicle_model" />
+          </div>
+        </section>
+
+        {hasField(rows, "governorate") && (
+          <section className="avoid-break">
+            <h2 className="text-lg font-semibold">{t("groupGovernorateTitle")}</h2>
+            <div className="mt-3">
+              <GroupTable stats={groupBreakdown(rows, "governorate").slice(0, REPORT_GROUP_ROWS)} field="governorate" />
+            </div>
+          </section>
+        )}
+
+        {hasField(rows, "service_center") && (
+          <section className="avoid-break">
+            <h2 className="text-lg font-semibold">{t("groupCenterTitle")}</h2>
+            <div className="mt-3">
+              <GroupTable stats={groupBreakdown(rows, "service_center").slice(0, REPORT_GROUP_ROWS)} field="service_center" />
+            </div>
           </section>
         )}
 

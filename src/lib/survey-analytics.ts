@@ -2,7 +2,7 @@
  * Pure analytics over the cleaned survey rows. Everything the dashboard shows
  * is computed here, so it can be tested without React.
  */
-import { isUsefulComment, type CleanedSurvey, type RootCause } from "./survey-cleaner";
+import { isUsefulComment, mondayOf, type CleanedSurvey, type RootCause } from "./survey-cleaner";
 
 // ---------------------------------------------------------------------------
 // Labels and colours
@@ -223,4 +223,63 @@ export function buildLists(rows: CleanedSurvey[]): SurveyLists {
     needFollowUp: dissatisfied.filter((r) => r.phone !== null && !isUsefulComment(r.comment)).sort(bySeverity),
     noContact: dissatisfied.filter((r) => r.phone === null).sort(bySeverity),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Groups: model, governorate, service centre
+// ---------------------------------------------------------------------------
+
+export type GroupField = "vehicle_model" | "governorate" | "service_center";
+
+export interface GroupStats {
+  key: string | null; // null = the response has no value for this field
+  summary: Summary;
+}
+
+/** One entry per value of `field`, the one with the most responses first. */
+export function groupBreakdown(rows: CleanedSurvey[], field: GroupField): GroupStats[] {
+  const groups = new Map<string | null, CleanedSurvey[]>();
+  for (const r of rows) {
+    const key = r[field]?.trim() || null;
+    const list = groups.get(key);
+    if (list) list.push(r);
+    else groups.set(key, [r]);
+  }
+  return [...groups]
+    .map(([key, list]) => ({ key, summary: summarize(list) }))
+    .sort((x, y) => {
+      // "no value" always last, then by number of responses
+      if ((x.key === null) !== (y.key === null)) return x.key === null ? 1 : -1;
+      return y.summary.total - x.summary.total;
+    });
+}
+
+/** True when at least one response has a value for `field`. */
+export const hasField = (rows: CleanedSurvey[], field: GroupField): boolean => rows.some((r) => Boolean(r[field]?.trim()));
+
+// ---------------------------------------------------------------------------
+// Weekly trend
+// ---------------------------------------------------------------------------
+
+export interface WeekStats {
+  week: string; // Monday of the week, YYYY-MM-DD (same as surveys.week_start in the database)
+  summary: Summary;
+}
+
+/** Every week from the first to the last response, empty weeks included, oldest first. */
+export function weeklyTrend(rows: CleanedSurvey[]): WeekStats[] {
+  if (rows.length === 0) return [];
+  const byWeek = new Map<string, CleanedSurvey[]>();
+  for (const r of rows) {
+    const week = mondayOf(r.survey_date);
+    const list = byWeek.get(week);
+    if (list) list.push(r);
+    else byWeek.set(week, [r]);
+  }
+  const weeks = [...byWeek.keys()].sort();
+  const result: WeekStats[] = [];
+  for (let w = weeks[0]; w <= weeks[weeks.length - 1]; w = addDays(w, 7)) {
+    result.push({ week: w, summary: summarize(byWeek.get(w) ?? []) });
+  }
+  return result;
 }

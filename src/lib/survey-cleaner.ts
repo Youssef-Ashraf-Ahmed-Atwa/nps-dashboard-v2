@@ -31,6 +31,8 @@ export type RemovalReason =
 /** One row from the sheet: header text -> cell value. */
 export type RawRow = Record<string, unknown>;
 
+import { matchGovernorate } from "./governorates";
+
 /** Matches the `customers` table. Only customers with a usable phone exist. */
 export interface CleanedCustomer {
   phone: string;
@@ -51,9 +53,26 @@ export interface CleanedSurvey {
   nps: number | null; // 0-10
   comment: string | null;
   vehicle_model: string | null;
-  service_center: string | null; // not in the weekly file, filled in later
+  governorate: string | null; // canonical English governorate name, or the text as typed
+  service_center: string | null; // service centre / branch, when the sheet has the column
   root_cause: RootCause | null; // from CC7
   root_cause_detail: string | null; // from SS1 / DP1
+}
+
+/** A warning as data, so the interface can show it in the user's language. */
+export type WarningCode =
+  | "markerRow"
+  | "missingColumn"
+  | "badScore"
+  | "singleScore"
+  | "badPhone"
+  | "badDate"
+  | "unknownCategory"
+  | "unknownGovernorate";
+
+export interface CleaningWarning {
+  code: WarningCode;
+  params: Record<string, string | number>;
 }
 
 export interface CleaningResult {
@@ -63,13 +82,15 @@ export interface CleaningResult {
   rows_removed: Record<RemovalReason, number>;
   customers: CleanedCustomer[];
   surveys: CleanedSurvey[];
-  warnings: string[];
+  warnings: string[]; // Arabic text of each warning
+  warning_items: CleaningWarning[]; // the same warnings as codes + values
 }
 
 /** Body of every non-2xx response from /api/process-survey. */
 export interface ApiError {
   error: string;
   details?: unknown;
+  code?: string; // machine-readable, e.g. "not_configured" when Supabase is not set up
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +102,14 @@ export const REQUIRED_COLUMNS = ["Date Created", "AD2", "BOS6", "SSP6"] as const
 
 /** Columns we use when they exist. A missing one only produces a warning. */
 export const OPTIONAL_COLUMNS = ["AD1", "AD4", "AD5", "Z-Comment", "CC7", "SS1", "DP1"] as const;
+
+/**
+ * Optional columns that will be added to the weekly sheet later. The first of
+ * these headers found in the file is used (case does not matter). When the new
+ * sheet arrives with a different header, add its exact name to the list.
+ */
+export const GOVERNORATE_COLUMNS = ["Governorate", "Governorate (المحافظة)", "المحافظة", "Gov", "City"] as const;
+export const SERVICE_CENTER_COLUMNS = ["Service Center", "Service Centre", "Branch", "مركز الخدمة", "الفرع"] as const;
 
 /** CC7 holds the complaint category itself (maintenance service / spare parts / the product). */
 const CATEGORY_COLUMN = "CC7";
@@ -305,7 +334,7 @@ export function parseSurveyDate(cell: unknown): number | null {
 const toIsoDate = (ts: number): string => new Date(ts).toISOString().slice(0, 10);
 
 /** Monday of the week containing `isoDate`; matches Postgres date_trunc('week'). */
-function mondayOf(isoDate: string): string {
+export function mondayOf(isoDate: string): string {
   const d = new Date(`${isoDate}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
   return d.toISOString().slice(0, 10);
@@ -319,8 +348,11 @@ function cleanModel(cell: unknown): string | null {
   const t = text(cell);
   if (!t) return null;
   const latin = t.replace(/\s*[-\u2013\u2014]\s*[\u0600-\u06FF][\s\S]*$/, "").trim();
-  return latin || t;
+  return (latin || t).replace(/\s+/g, " ");
 }
+
+/** Text typed by hand: spaces collapsed and length limited. */
+const cleanFreeText = (cell: unknown, max = 80): string | null => text(cell).replace(/\s+/g, " ").slice(0, max) || null;
 
 const normalizeHeader = (h: string): string => h.replace(/^\uFEFF/, "").trim().toLowerCase();
 
@@ -346,6 +378,8 @@ interface Candidate {
   nps: number | null;
   comment: string | null;
   model: string | null;
+  governorate: string | null;
+  serviceCenter: string | null;
   rootCause: RootCause | null;
   detail: string | null;
 }
@@ -376,6 +410,15 @@ export function cleanSurveyRows(rows: RawRow[]): CleaningResult {
     return key === undefined ? undefined : row[key];
   };
 
+  /** First non-empty value among several possible headers. */
+  const firstValue = (row: RawRow, columns: readonly string[]): unknown => {
+    for (const column of columns) {
+      const value = cell(row, column);
+      if (text(value)) return value;
+    }
+    return undefined;
+  };
+
   const removed: Record<RemovalReason, number> = {
     response_header_row: 0,
     test_comment: 0,
@@ -386,10 +429,16 @@ export function cleanSurveyRows(rows: RawRow[]): CleaningResult {
     duplicate_phone: 0,
   };
   const warnings: string[] = [];
+  const warningItems: CleaningWarning[] = [];
+  const warn = (code: WarningCode, params: Record<string, string | number>, arabic: string) => {
+    warnings.push(arabic);
+    warningItems.push({ code, params });
+  };
   const badScoreRows: number[] = [];
   const badPhoneRows: number[] = [];
   const badDateRows: number[] = [];
   const unknownCategories = new Set<string>();
+  const unknownGovernorates = new Set<string>();
   let singleScoreRows = 0;
   const candidates: Candidate[] = [];
 
@@ -451,6 +500,16 @@ export function cleanSurveyRows(rows: RawRow[]): CleaningResult {
       }
     }
 
+    const governorateText = text(firstValue(row, GOVERNORATE_COLUMNS));
+    let governorate: string | null = null;
+    if (governorateText) {
+      governorate = matchGovernorate(governorateText);
+      if (!governorate) {
+        governorate = cleanFreeText(governorateText, 60);
+        unknownGovernorates.add(governorateText.slice(0, 40));
+      }
+    }
+
     candidates.push({
       timestamp,
       phone,
@@ -460,6 +519,8 @@ export function cleanSurveyRows(rows: RawRow[]): CleaningResult {
       nps: nps.value,
       comment: comment || null,
       model: cleanModel(cell(row, "AD4")),
+      governorate,
+      serviceCenter: cleanFreeText(firstValue(row, SERVICE_CENTER_COLUMNS)),
       rootCause,
       detail,
     });
@@ -492,7 +553,8 @@ export function cleanSurveyRows(rows: RawRow[]): CleaningResult {
     nps: c.nps,
     comment: c.comment,
     vehicle_model: c.model,
-    service_center: null,
+    governorate: c.governorate,
+    service_center: c.serviceCenter,
     root_cause: c.rootCause,
     root_cause_detail: c.detail,
   }));
@@ -503,36 +565,56 @@ export function cleanSurveyRows(rows: RawRow[]): CleaningResult {
 
   // ---- Warnings: counts and Excel row numbers only, never customer data ----
   if (!isResponseMarkerRow(rows[0] ?? {})) {
-    warnings.push(
+    warn(
+      "markerRow",
+      {},
       'الصف رقم 2 ليس صف «Response»، لذلك لم يتم تجاهل أي صف بحسب موضعه. تأكد من أن هذا هو الملف الصحيح.',
     );
   }
   for (const column of OPTIONAL_COLUMNS) {
     if (!headerIndex.has(normalizeHeader(column))) {
-      warnings.push(`العمود ${column} غير موجود في الملف، وسيتم ترك بياناته فارغة.`);
+      warn("missingColumn", { column }, `العمود ${column} غير موجود في الملف، وسيتم ترك بياناته فارغة.`);
     }
   }
   if (badScoreRows.length > 0) {
-    warnings.push(
+    warn(
+      "badScore",
+      { n: badScoreRows.length, rows: sampleRows(badScoreRows) },
       `${badScoreRows.length} صف فيه قيمة CSAT أو NPS غير مفهومة (الصفوف: ${sampleRows(badScoreRows)})، وتم ترك هذا التقييم فارغًا.`,
     );
   }
   if (singleScoreRows > 0) {
-    warnings.push(`${singleScoreRows} صف محتفظ به يحتوي على تقييم واحد فقط (CSAT أو NPS).`);
+    warn("singleScore", { n: singleScoreRows }, `${singleScoreRows} صف محتفظ به يحتوي على تقييم واحد فقط (CSAT أو NPS).`);
   }
   if (badPhoneRows.length > 0) {
-    warnings.push(
+    warn(
+      "badPhone",
+      { n: badPhoneRows.length, rows: sampleRows(badPhoneRows) },
       `${badPhoneRows.length} صف برقم هاتف غير صالح (الصفوف: ${sampleRows(badPhoneRows)}). تم الاحتفاظ بها في حسابات NPS وCSAT، لكن لا يمكن الاتصال بأصحابها ولا دمج المكرر منها.`,
     );
   }
   if (badDateRows.length > 0) {
-    warnings.push(
+    warn(
+      "badDate",
+      { n: badDateRows.length, rows: sampleRows(badDateRows) },
       `${badDateRows.length} صف تم استبعاده لأن تاريخ الإنشاء غير مقروء (الصفوف: ${sampleRows(badDateRows)}).`,
     );
   }
   if (unknownCategories.size > 0) {
-    warnings.push(
+    const values = [...unknownCategories].slice(0, 5).join(", ");
+    warn(
+      "unknownCategory",
+      { column: CATEGORY_COLUMN, values },
       `قيم غير معروفة في عمود ${CATEGORY_COLUMN} تم تصنيفها «أخرى»: ${[...unknownCategories].slice(0, 5).join("، ")}.`,
+    );
+  }
+
+  if (unknownGovernorates.size > 0) {
+    const values = [...unknownGovernorates].slice(0, 5).join(", ");
+    warn(
+      "unknownGovernorate",
+      { values },
+      `محافظات غير معروفة تم الاحتفاظ بها كما كُتبت: ${[...unknownGovernorates].slice(0, 5).join("، ")}.`,
     );
   }
 
@@ -544,5 +626,6 @@ export function cleanSurveyRows(rows: RawRow[]): CleaningResult {
     customers,
     surveys,
     warnings,
+    warning_items: warningItems,
   };
 }

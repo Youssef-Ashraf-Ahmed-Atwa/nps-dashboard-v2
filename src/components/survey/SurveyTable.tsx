@@ -35,7 +35,7 @@ interface Props {
 }
 
 export function SurveyTable({ title, description, rows, accent }: Props) {
-  const { t, reason } = useLang();
+  const { t, reason, place } = useLang();
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? rows : rows.slice(0, PAGE_SIZE);
 
@@ -47,10 +47,11 @@ export function SurveyTable({ title, description, rows, accent }: Props) {
       <p className="text-sm text-slate-600">{description}</p>
 
       <div className="mt-4 overflow-x-auto">
-        <table className="w-full min-w-[760px] text-start text-sm">
+        <table className="w-full min-w-[860px] text-start text-sm">
           <thead className="border-b border-slate-200 text-slate-600">
             <tr>
               <th scope="col" className="py-2 pe-4 text-start font-medium">{t("colPhone")}</th>
+              <th scope="col" className="py-2 pe-4 text-start font-medium">{t("colModel")}</th>
               <th scope="col" className="py-2 pe-4 text-start font-medium">NPS</th>
               <th scope="col" className="py-2 pe-4 text-start font-medium">CSAT</th>
               <th scope="col" className="py-2 pe-4 text-start font-medium">{t("colCategory")}</th>
@@ -78,6 +79,14 @@ export function SurveyTable({ title, description, rows, accent }: Props) {
                       </span>
                     )}
                     {r.customer_name && <div className="text-xs text-slate-500">{r.customer_name}</div>}
+                  </td>
+                  <td className="py-2.5 pe-4">
+                    {r.vehicle_model ? <span dir="ltr">{r.vehicle_model}</span> : <span className="text-slate-400">-</span>}
+                    {(r.governorate || r.service_center) && (
+                      <div className="text-xs text-slate-500">
+                        {[r.governorate ? place(r.governorate) : null, r.service_center].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
                   </td>
                   <td className="py-2.5 pe-4"><ScoreBadge label="NPS" value={r.nps} group={group} /></td>
                   <td className="py-2.5 pe-4"><ScoreBadge label="CSAT" value={r.csat} group={group} /></td>

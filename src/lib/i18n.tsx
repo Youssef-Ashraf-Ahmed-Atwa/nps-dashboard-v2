@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { governorateLabel } from "./governorates";
 import type { RootCause } from "./survey-cleaner";
 
 export type Lang = "ar" | "en";
@@ -51,7 +52,7 @@ const ar = {
   excludedLine: "تم استبعاد: {list}.",
   rawRowsLine: "عدد الصفوف في الملف: {n}",
   reviewTitle: "يرجى المراجعة",
-  notSavedYet: "لم يتم حفظ أي شيء بعد. الحفظ في قاعدة البيانات هو الخطوة التالية.",
+  notSavedYet: "لم يتم حفظ أي شيء بعد. راجع النتيجة ثم اضغط «حفظ في قاعدة البيانات».",
 
   // Dashboard
   dashTitle: "نتائج CSAT وNPS",
@@ -136,6 +137,87 @@ const ar = {
   moreReasons: "+ {n} أسباب أخرى أقل تكرارًا.",
   withoutDetail: "{n} شكوى بدون سبب تفصيلي.",
 
+  // Navigation, saving, saved data
+  navUpload: "رفع وتحليل",
+  navTickets: "متابعة العملاء",
+  saveBtn: "حفظ في قاعدة البيانات",
+  saving: "جارٍ الحفظ...",
+  savedOk: "تم الحفظ: {inserted} جديد و{updated} محدّث، من {total} رد.",
+  saveHint: "الحفظ آمن: رفع نفس الملف مرة أخرى لا يكرر الردود.",
+  loadSavedBtn: "عرض كل البيانات المحفوظة",
+  loadingSaved: "جارٍ تحميل البيانات المحفوظة...",
+  dbSourceName: "كل البيانات المحفوظة",
+  dbLoadedLine: "تم تحميل {n} رد من قاعدة البيانات.",
+  dbEmpty: "لا توجد بيانات محفوظة بعد. ارفع ملفًا واحفظه أولًا.",
+  errDbNotConfigured: "قاعدة البيانات غير مربوطة بعد. أضف مفاتيح Supabase في ملف .env.local وأعد تشغيل السيرفر.",
+
+  // Groups
+  colGovernorate: "المحافظة",
+  colServiceCenter: "مركز الخدمة",
+  groupGovernorateTitle: "النتائج حسب المحافظة",
+  groupGovernorateDesc: "كل محافظة بعدد الردود ومتوسط CSAT وNPS. المحافظات ذات الردود القليلة استرشادية فقط.",
+  groupCenterTitle: "النتائج حسب مركز الخدمة",
+  groupCenterDesc: "كل مركز خدمة بعدد الردود ومتوسط CSAT وNPS. المراكز ذات الردود القليلة استرشادية فقط.",
+  showMoreGroups: "عرض الكل ({n})",
+  showFewerGroups: "عرض الأعلى فقط",
+
+  // Weekly trend
+  trendTitle: "الاتجاه الأسبوعي",
+  trendDesc: "NPS ومتوسط CSAT لكل أسبوع (يبدأ الأسبوع يوم الاثنين). الأسابيع ذات الإجابات القليلة استرشادية.",
+  trendNpsTitle: "NPS حسب الأسبوع",
+  trendCsatTitle: "متوسط CSAT حسب الأسبوع",
+  trendNeedMore: "يلزم أسبوعان على الأقل لعرض الاتجاه.",
+  colWeek: "الأسبوع",
+  colChange: "التغير في NPS",
+  trendFew: "إجابات NPS قليلة",
+  weekOf: "أسبوع {date}",
+
+  // Tickets
+  ticketsTitle: "متابعة العملاء غير الراضين",
+  ticketsIntro: "كل عميل غير راضٍ برقم هاتف صالح تُفتح له تذكرة تلقائيًا، والمطلوب الاتصال به خلال 48 ساعة.",
+  tkAll: "الكل",
+  tkOpen: "مفتوحة",
+  tkOverdue: "متأخرة",
+  tkContacted: "تم الاتصال",
+  tkResolved: "تم الحل",
+  tkUnreachable: "لا يرد",
+  tkDue: "الموعد: {date}",
+  tkOverdueBy: "متأخرة {h} ساعة",
+  tkLeft: "متبقي {h} ساعة",
+  tkBtnContacted: "تم الاتصال",
+  tkBtnResolved: "تم الحل",
+  tkBtnUnreachable: "لا يرد",
+  tkBtnReopen: "إعادة فتح",
+  tkNotes: "ملاحظات",
+  tkNotesPlaceholder: "ماذا حدث في المكالمة؟",
+  tkSaveNotes: "حفظ الملاحظات",
+  tkNone: "لا توجد تذاكر في هذا القسم.",
+  tkLoading: "جارٍ التحميل...",
+  tkRefresh: "تحديث",
+  tkUpdateError: "تعذر تحديث التذكرة.",
+  tkLoadError: "تعذر تحميل التذاكر.",
+  tkSurveyDate: "تاريخ الاستبيان",
+  warnUnknownGovernorate: "محافظات غير معروفة تم الاحتفاظ بها كما كُتبت: {values}.",
+
+  // By model
+  modelTitle: "النتائج حسب الموديل",
+  modelDesc: "كل موديل بعدد الردود ومتوسط CSAT وNPS. الموديلات ذات الردود القليلة استرشادية فقط.",
+  colResponses: "الردود",
+  colCsatAvg: "متوسط CSAT",
+  colNpsAnswers: "إجابات NPS",
+  smallSampleBadge: "عينة صغيرة",
+
+  // Cleaning warnings (shown on the upload page)
+  warnMarkerRow:
+    "الصف رقم 2 ليس صف «Response»، لذلك لم يتم تجاهل أي صف بحسب موضعه. تأكد من أن هذا هو الملف الصحيح.",
+  warnMissingColumn: "العمود {column} غير موجود في الملف، وسيتم ترك بياناته فارغة.",
+  warnBadScore: "{n} صف فيه قيمة CSAT أو NPS غير مفهومة (الصفوف: {rows})، وتم ترك هذا التقييم فارغًا.",
+  warnSingleScore: "{n} صف محتفظ به يحتوي على تقييم واحد فقط (CSAT أو NPS).",
+  warnBadPhone:
+    "{n} صف برقم هاتف غير صالح (الصفوف: {rows}). تم الاحتفاظ بها في حسابات NPS وCSAT، لكن لا يمكن الاتصال بأصحابها ولا دمج المكرر منها.",
+  warnBadDate: "{n} صف تم استبعاده لأن تاريخ الإنشاء غير مقروء (الصفوف: {rows}).",
+  warnUnknownCategory: "قيم غير معروفة في عمود {column} تم تصنيفها «أخرى»: {values}.",
+
   // Manager report
   reportTitle: "تقرير رضا العملاء (NPS وCSAT)",
   reportPeriod: "الفترة: من {from} إلى {to}",
@@ -188,7 +270,7 @@ const en: Record<MessageKey, string> = {
   excludedLine: "Excluded: {list}.",
   rawRowsLine: "Rows in the file: {n}",
   reviewTitle: "Please review",
-  notSavedYet: "Nothing has been saved yet. Saving to the database is the next step.",
+  notSavedYet: "Nothing has been saved yet. Review the result, then press \"Save to database\".",
 
   dashTitle: "CSAT and NPS results",
   exportBtn: "Export shown data (Excel)",
@@ -267,6 +349,81 @@ const en: Record<MessageKey, string> = {
   noDetailInCategory: "There are no detailed answers for this category in the file.",
   moreReasons: "+ {n} other, less frequent reasons.",
   withoutDetail: "{n} complaints without a detailed reason.",
+
+  navUpload: "Upload and analyze",
+  navTickets: "Customer follow-up",
+  saveBtn: "Save to database",
+  saving: "Saving...",
+  savedOk: "Saved: {inserted} new and {updated} updated, out of {total} responses.",
+  saveHint: "Saving is safe: uploading the same file again does not duplicate responses.",
+  loadSavedBtn: "Show all saved data",
+  loadingSaved: "Loading saved data...",
+  dbSourceName: "All saved data",
+  dbLoadedLine: "{n} responses loaded from the database.",
+  dbEmpty: "There is no saved data yet. Upload a file and save it first.",
+  errDbNotConfigured: "The database is not connected yet. Add the Supabase keys to the .env.local file and restart the server.",
+
+  colGovernorate: "Governorate",
+  colServiceCenter: "Service center",
+  groupGovernorateTitle: "Results by governorate",
+  groupGovernorateDesc: "Each governorate with its responses, average CSAT and NPS. Governorates with few responses are indicative only.",
+  groupCenterTitle: "Results by service center",
+  groupCenterDesc: "Each service center with its responses, average CSAT and NPS. Centers with few responses are indicative only.",
+  showMoreGroups: "Show all ({n})",
+  showFewerGroups: "Show top only",
+
+  trendTitle: "Weekly trend",
+  trendDesc: "NPS and average CSAT for each week (weeks start on Monday). Weeks with few answers are indicative only.",
+  trendNpsTitle: "NPS by week",
+  trendCsatTitle: "Average CSAT by week",
+  trendNeedMore: "At least two weeks are needed to show a trend.",
+  colWeek: "Week",
+  colChange: "NPS change",
+  trendFew: "few NPS answers",
+  weekOf: "Week of {date}",
+
+  ticketsTitle: "Follow-up of dissatisfied customers",
+  ticketsIntro: "Every dissatisfied customer with a valid phone number gets a ticket automatically, and should be called within 48 hours.",
+  tkAll: "All",
+  tkOpen: "Open",
+  tkOverdue: "Overdue",
+  tkContacted: "Contacted",
+  tkResolved: "Resolved",
+  tkUnreachable: "No answer",
+  tkDue: "Due: {date}",
+  tkOverdueBy: "{h} h overdue",
+  tkLeft: "{h} h left",
+  tkBtnContacted: "Mark contacted",
+  tkBtnResolved: "Mark resolved",
+  tkBtnUnreachable: "No answer",
+  tkBtnReopen: "Reopen",
+  tkNotes: "Notes",
+  tkNotesPlaceholder: "What happened on the call?",
+  tkSaveNotes: "Save notes",
+  tkNone: "There are no tickets in this section.",
+  tkLoading: "Loading...",
+  tkRefresh: "Refresh",
+  tkUpdateError: "Could not update the ticket.",
+  tkLoadError: "Could not load the tickets.",
+  tkSurveyDate: "Survey date",
+  warnUnknownGovernorate: "Unknown governorates were kept as typed: {values}.",
+
+  modelTitle: "Results by model",
+  modelDesc: "Each model with its responses, average CSAT and NPS. Models with few responses are indicative only.",
+  colResponses: "Responses",
+  colCsatAvg: "Average CSAT",
+  colNpsAnswers: "NPS answers",
+  smallSampleBadge: "small sample",
+
+  warnMarkerRow:
+    "Excel row 2 is not the \"Response\" row, so no row was skipped by position. Make sure this is the right file.",
+  warnMissingColumn: "Column {column} is not in the file; its data will be left empty.",
+  warnBadScore: "{n} rows have a CSAT or NPS value that could not be understood (rows: {rows}); that rating was left empty.",
+  warnSingleScore: "{n} kept rows have only one rating (CSAT or NPS).",
+  warnBadPhone:
+    "{n} rows have an invalid phone number (rows: {rows}). They are kept in the NPS and CSAT figures, but the customers cannot be called and their duplicates cannot be merged.",
+  warnBadDate: "{n} rows were excluded because the creation date could not be read (rows: {rows}).",
+  warnUnknownCategory: "Unknown values in column {column} were classified as \"Other\": {values}.",
 
   reportTitle: "Customer satisfaction report (NPS and CSAT)",
   reportPeriod: "Period: {from} to {to}",
@@ -352,6 +509,8 @@ interface LangContextValue {
   setLang: (lang: Lang) => void;
   t: (key: MessageKey, params?: Params) => string;
   reason: (text: string) => string;
+  /** Governorate name in the current language (unknown spellings are shown as stored). */
+  place: (value: string) => string;
 }
 
 const LangContext = createContext<LangContextValue | null>(null);
@@ -393,6 +552,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       setLang,
       t,
       reason: (text: string) => translateReason(text, lang),
+      place: (value: string) => governorateLabel(value, lang),
     };
   }, [lang, setLang]);
 
