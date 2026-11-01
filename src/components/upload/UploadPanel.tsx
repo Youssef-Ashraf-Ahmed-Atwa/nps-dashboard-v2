@@ -4,7 +4,8 @@ import { useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { SurveyDashboard } from "@/components/survey/SurveyDashboard";
 import type { SaveResult, SavedSurveys } from "@/lib/api-types";
 import { useLang, type MessageKey } from "@/lib/i18n";
-import type { ApiError, CleanedSurvey, CleaningResult, RemovalReason, WarningCode } from "@/lib/survey-cleaner";
+import { useSurveySession } from "@/lib/survey-session";
+import type { ApiError, CleaningResult, RemovalReason, WarningCode } from "@/lib/survey-cleaner";
 
 const MAX_BYTES = 4 * 1024 * 1024; // same limit as the API route (Vercel allows 4.5 MB)
 
@@ -29,22 +30,6 @@ const WARNING_KEYS: Record<WarningCode, MessageKey> = {
   unknownGovernorate: "warnUnknownGovernorate",
 };
 
-/** Where the numbers on screen come from. */
-type Source = { kind: "file"; result: CleaningResult } | { kind: "database" };
-
-type State =
-  | { phase: "idle" }
-  | { phase: "uploading"; fileName: string }
-  | { phase: "loadingSaved" }
-  | { phase: "done"; source: Source; fileName: string; surveys: CleanedSurvey[]; runId: number }
-  | { phase: "error"; message: string };
-
-type SaveState =
-  | { status: "idle" }
-  | { status: "saving" }
-  | { status: "saved"; result: SaveResult }
-  | { status: "error"; message: string };
-
 interface Props {
   /** Called with the cleaned data of every uploaded file. */
   onCleaned?: (result: CleaningResult, fileName: string) => void;
@@ -56,11 +41,9 @@ const buttonClass =
 export function UploadPanel({ onCleaned }: Props) {
   const { t, dir } = useLang();
   const inputRef = useRef<HTMLInputElement>(null);
-  const fileRef = useRef<File | null>(null); // the last cleaned file, sent again when saving
-  const runCounter = useRef(0);
+  // The analysis lives in the session, so it survives a visit to the tickets page.
+  const { state, setState, save, setSave, fileRef, runCounter } = useSurveySession();
   const [dragging, setDragging] = useState(false);
-  const [state, setState] = useState<State>({ phase: "idle" });
-  const [save, setSave] = useState<SaveState>({ status: "idle" });
 
   /** "Duplicates (5), test comments (2)" from the non-zero counts. */
   function describeRemoved(removed: CleaningResult["rows_removed"]): string {
